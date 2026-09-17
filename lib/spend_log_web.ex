@@ -101,8 +101,12 @@ defmodule SpendLogWeb do
       # LiveVue helpers (to_vue_form/1 — normalize forms before passing them to Vue islands)
       import SpendLogWeb.LiveVueHelpers
 
-      # Common modules used in templates
+      # Common modules used in templates.
+      # Keep these in separate comment-delimited groups: credo's AliasOrder only
+      # compares aliases on consecutive lines, and `SpendLogWeb` sorts after
+      # `Phoenix`.
       alias SpendLogWeb.Layouts
+      # JS commands for client-side interactions
       alias Phoenix.LiveView.JS
 
       # Routes generation with the ~p sigil
