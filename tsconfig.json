@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "paths": {
+      "*": [ "./deps/*", "./node_modules/*" ]
+    },
+    "strict": true,
+    "types": [ "vite/client", "node" ]
+  },
+  "include": [
+    "./assets/js/**/*",
+    "./assets/vue/**/*",
+    "./lib/spend_log_web/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
