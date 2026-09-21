@@ -5,7 +5,7 @@ defmodule SpendLog.SSRRuntime do
   `LiveVue.SSR.QuickBEAM` hardcodes `QuickBEAM.start(name: …, apis: […])` and ignores options, so it
   runs at QuickBEAM's 8 MB default `max_stack_size`. Nuxt UI's tailwind-merge initialization recurses
   ~7.5 MB deep building its class-group map — right at that ceiling — so a runtime with slightly
-  heavier stack frames (e.g. the Linux preview container vs. local macOS) tips over 8 MB and the SSR
+  heavier stack frames (e.g. the Linux demo container vs. local macOS) tips over 8 MB and the SSR
   render dies with `RangeError: Maximum call stack size exceeded`.
 
   This child starts the QuickBEAM runtime **registered under `LiveVue.SSR.QuickBEAM`** (the name

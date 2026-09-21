@@ -46,7 +46,7 @@ end
 # `Protocol.UndefinedError`. This bites in a non-obvious place: LiveVue's props-diff
 # (`enable_props_diff`, ON by default in dev/prod, but OFF in this template's config/test.exs) encodes
 # the form ASSIGN to compute a minimal patch. So a LiveView that stores the raw form in an assign and
-# normalizes only at render (`form={to_vue_form(@form)}`) passes every test, then crashes at preview
+# normalizes only at render (`form={to_vue_form(@form)}`) passes every test, then crashes at demo
 # on the first `validate` — the diff encodes the un-normalized assign, bypassing to_vue_form entirely.
 #
 # Implement the encoder by delegating to the form's Phoenix.HTML.Form conversion (the `data: nil`

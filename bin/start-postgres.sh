@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start a local PostgreSQL inside the container for the preview/run loop. Idempotent.
+# Start a local PostgreSQL inside the container for the demo/run loop. Idempotent.
 # Generated Phoenix/Ash apps default to postgres/postgres @ 127.0.0.1:5432.
 set -euo pipefail
 

@@ -15,10 +15,10 @@ name: CI
 # because GitHub matches required checks on **SHA + context, not on the triggering event**.
 #
 # COUPLING (do not split these apart):
-#   1. `preview-image` is gated on `github.event_name == 'push'` AND an `assignment/` ref prefix, so a
-#      `milestone/**` push builds NO preview image (correct — the milestone branch itself is not a
-#      previewable assignment; the polish assignment on its own `assignment/<polish-id>` branch IS).
-#      Drop `assignment/**` from `push:` and preview images silently stop being built.
+#   1. `demo-image` is gated on `github.event_name == 'push'` AND an `assignment/` ref prefix, so a
+#      `milestone/**` push builds NO demo image (correct — the milestone branch itself is not a
+#      demoable assignment; the polish assignment on its own `assignment/<polish-id>` branch IS).
+#      Drop `assignment/**` from `push:` and demo images silently stop being built.
 #   2. `builder-image` / `release-image` are gated on `push` to `main`. Same dependency.
 #   3. Re-adding `pull_request:` reintroduces the duplicate suite. If you ever need it (e.g. to CI
 #      contributions from forks, which push-only cannot reach), you must also re-add a job-level
@@ -144,14 +144,14 @@ jobs:
   # scaffold rename rewrites the template's name into the app's name, turning a name-based guard into
   # a dead condition. A scaffolded repo is not a template, so it runs the jobs.
   #
-  # Only on push (a PR's images would double-build with the branch push). The PREVIEW image is built
-  # ONLY on `assignment/**` branches: the orchestrator boots `:preview-<sha>` keyed to an assignment
+  # Only on push (a PR's images would double-build with the branch push). The DEMO image is built
+  # ONLY on `assignment/**` branches: the orchestrator boots `:demo-<sha>` keyed to an assignment
   # build's branch
-  # commit, so a `main`-sha preview (and the floating `:preview` tag) is never consumed — building it
+  # commit, so a `main`-sha demo (and the floating `:demo` tag) is never consumed — building it
   # on main, including the initial scaffold commit, is pure waste. The builder and release images are
   # app-code-independent / prod artifacts → main only.
   #
-  # arm64 is the msb host arch (Apple Silicon), so the builder + preview images are built for
+  # arm64 is the msb host arch (Apple Silicon), so the builder + demo images are built for
   # linux/arm64 on NATIVE arm64 runners (`ubuntu-24.04-arm`, paid larger runners — scaffolded repos
   # are private so the free arm runners don't apply). Native arm64 means NO QEMU emulation for these
   # jobs. The release image is amd64 and stays on the default amd64 runner.
@@ -162,7 +162,7 @@ jobs:
   #
   #   1. GHA cache is BRANCH-SCOPED, and every assignment build runs on a FRESH `assignment/<slug>-<id>`
   #      branch. A cache written there is readable only from that branch, so the next assignment build —
-  #      a new id — could never read it. Measured on a real build: preview-image took 4m10s with ZERO
+  #      a new id — could never read it. Measured on a real build: demo-image took 4m10s with ZERO
   #      `CACHED` steps (93s of it `mix deps.compile` alone), while a second push to the SAME build
   #      branch took 1m22s. The layer ordering in the Dockerfile was always correct; the cache was
   #      simply unreachable, and `cache-to` was uploading ~500MB per build that nothing would ever
@@ -170,7 +170,7 @@ jobs:
   #      A registry ref has no branch scoping: every build branch reads and writes the same ref.
   #
   #   2. All three image jobs previously shared the DEFAULT gha scope (`buildkit`), so they
-  #      overwrote each other's cache index — and since `release` is amd64 while `builder`/`preview`
+  #      overwrote each other's cache index — and since `release` is amd64 while `builder`/`demo`
   #      are arm64, whichever job wrote last left an index whose layers the others cannot match.
   #      That is why builder-image showed zero `CACHED` even on main→main, a valid scope. Distinct
   #      refs per job fix it; do NOT collapse them back onto one ref.
@@ -180,8 +180,8 @@ jobs:
   # carry the real win. The `:buildcache-*` tags are ordinary GHCR packages living alongside the
   # image tags — they are BuildKit cache manifests, not runnable images; never boot one.
 
-  preview-image:
-    name: Build & push preview image
+  demo-image:
+    name: Build & push demo image
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/assignment/') && !github.event.repository.is_template
     runs-on: ubuntu-24.04-arm
@@ -201,16 +201,16 @@ jobs:
         run: |
           repo="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
-          echo "ref=ghcr.io/${repo}:preview-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "ref=ghcr.io/${repo}:demo-${{ github.sha }}" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          target: preview
+          target: demo
           platforms: linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.ref }}
-          cache-from: type=registry,ref=ghcr.io/${{ steps.tags.outputs.repo }}:buildcache-preview
-          cache-to: type=registry,ref=ghcr.io/${{ steps.tags.outputs.repo }}:buildcache-preview,mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ steps.tags.outputs.repo }}:buildcache-demo
+          cache-to: type=registry,ref=ghcr.io/${{ steps.tags.outputs.repo }}:buildcache-demo,mode=max
 
   builder-image:
     name: Build & push builder image
