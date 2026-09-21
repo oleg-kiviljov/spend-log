@@ -595,7 +595,7 @@ if git diff --cached --quiet; then
   #    the work IS delivered and the finalize push below just fast-forwards. NOT a failure; the old
   #    "nothing to deliver" WARN here was a false alarm.
   #  - Agent produced nothing at all: HEAD still equals base. Emit no agent_commit — a false SHA
-  #    equal to base would sail through verify (CI green on scaffold) and blow up later at preview.
+  #    equal to base would sail through verify (CI green on scaffold) and blow up later at demo.
   #    The "no commits beyond base" guard in finalize then blocks the build, which is correct.
   if [ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BASE_BRANCH" 2>/dev/null || true)" ]; then
     echo "WARN: agent produced no changes to commit — nothing to deliver" >&2

@@ -7,13 +7,13 @@
 #   builder  — base + pinned `claude` + the harness plugins + the `agent-build` entrypoint.
 #              This is the dev/agent container: the orchestrator execs `agent-build` in a container
 #              booted from it; a human can boot the same image to develop.
-#   preview  — base + the compiled app, booted for human review (in-container Postgres → migrate →
+#   demo     — base + the compiled app, booted for human review (in-container Postgres → migrate →
 #              seed → serve on :4000). No claude.
 #   release  — base + a slim `mix release` prod artifact.
 #
 # Build a specific target (match the msb host arch — Apple Silicon = arm64):
 #   podman build --target builder --platform linux/arm64 -t app:builder .
-#   podman build --target preview --platform linux/arm64 -t app:preview .
+#   podman build --target demo --platform linux/arm64 -t app:demo .
 #   podman build --target release -t app:release .
 
 # Elixir 1.20 (OTP 28) — matches the dev/host toolchain and the build sandbox, so the app
@@ -54,7 +54,7 @@ ENV LANG=C.UTF-8 \
 ARG NODE_MAJOR
 
 # System deps: git, curl, gnupg (verify the apt keys), build tools (native deps), Postgres
-# (the in-image dev/preview loop needs a DB), inotify (live reload), locales.
+# (the in-image dev/demo loop needs a DB), inotify (live reload), locales.
 #
 # Postgres comes from the PGDG apt repo (same keyring pattern as nodesource), NOT Debian bookworm's
 # suite: bookworm ships PG 15, but the generated app declares `min_pg_version` 18.x and AshPostgres
@@ -70,7 +70,7 @@ ARG NODE_MAJOR
 # mount, never in the layer, so `apt-get clean` is dropped; the apt index IS in the layer and removed.
 #
 # KNOWN LIMITATION — system deps are NOT self-healing across an assignment build. An assignment can
-# freely add pure-Elixir/hex deps (the agent's `mix deps.get` + the preview image's `app-build` stage both
+# freely add pure-Elixir/hex deps (the agent's `mix deps.get` + the demo image's `app-build` stage both
 # re-resolve mix.lock, and C-only NIFs compile against `build-essential` above). But a dep needing a
 # NEW system package or toolchain (libvips, imagemagick, ffmpeg, a Rust NIF, a shelled-out binary)
 # must be added to THIS list by hand: the build agent runs inside an already-built `builder` image, so
@@ -96,10 +96,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
  && apt-get install -y --no-install-recommends nodejs "postgresql-${PG_MAJOR}" \
  && rm -rf /var/lib/apt/lists/*
 
-# Hex + rebar baked so the build/preview loops don't fetch them at runtime.
+# Hex + rebar baked so the build/demo loops don't fetch them at runtime.
 RUN mix local.hex --force && mix local.rebar --force
 
-# Shared helper: start a local Postgres (used by both the builder and preview entrypoints).
+# Shared helper: start a local Postgres (used by both the builder and demo entrypoints).
 COPY bin/start-postgres.sh /usr/local/bin/start-postgres
 RUN chmod +x /usr/local/bin/start-postgres
 
@@ -164,7 +164,7 @@ RUN chmod +x /usr/local/bin/agent-build
 # way. What this image still owns is the TOOLCHAIN the scan needs (mix, claude, the finder plugins).
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────
-# app-build — compile the app + assets once (shared by preview and release)
+# app-build — compile the app + assets once (shared by demo and release)
 # ─────────────────────────────────────────────────────────────────────────────────────────────
 FROM base AS app-build
 ENV MIX_ENV=prod
@@ -204,7 +204,7 @@ COPY . .
 #      succeeds; `assets.deploy` overwrites it with the real one, and the server re-evaluates
 #      runtime.exs at boot against the real manifest.
 # Then drop node_modules (~400 MB) in the SAME layer: assets are compiled into priv/static and SSR
-# runs in-BEAM (LiveVue QuickBEAM), so neither `preview` nor `release` needs node_modules at runtime
+# runs in-BEAM (LiveVue QuickBEAM), so neither `demo` nor `release` needs node_modules at runtime
 # (release-build copies only the release dir). Same RUN = the fat dir never ships in a layer.
 RUN mkdir -p priv/static/.vite && printf '{}' > priv/static/.vite/manifest.json
 RUN DATABASE_URL="ecto://postgres:postgres@127.0.0.1:5432/build_placeholder" \
@@ -213,11 +213,11 @@ RUN DATABASE_URL="ecto://postgres:postgres@127.0.0.1:5432/build_placeholder" \
  && rm -rf node_modules assets/node_modules
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────
-# preview — base + compiled app, booted as a running server for human review
+# demo — base + compiled app, booted as a running server for human review
 # ─────────────────────────────────────────────────────────────────────────────────────────────
-FROM app-build AS preview
+FROM app-build AS demo
 
-LABEL org.opencontainers.image.title="spend-log-preview" \
+LABEL org.opencontainers.image.title="spend-log-demo" \
       org.opencontainers.image.description="The app booted for on-demand human review (in-container Postgres → migrate → seed → serve on :4000). No claude."
 
 COPY bin/entrypoint.sh /usr/local/bin/entrypoint

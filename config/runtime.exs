@@ -24,9 +24,9 @@ config :spend_log, SpendLogWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 # Let the runtime env dial the logger level. Compile-time config otherwise wins (dev: `:debug`,
-# prod: `:info`), so this only overrides when `LOG_LEVEL` is explicitly set. The preview container
+# prod: `:info`), so this only overrides when `LOG_LEVEL` is explicitly set. The demo container
 # boots this app under prod config but sets `LOG_LEVEL=debug` so Ecto's `:debug` SQL query logs
-# surface in the live preview console (prod's `:info` would filter them out). Only a known level is
+# surface in the live demo console (prod's `:info` would filter them out). Only a known level is
 # honored; anything else is ignored so a typo can't crash boot.
 if level = System.get_env("LOG_LEVEL") do
   if level in ~w(emergency alert critical error warning notice info debug) do
