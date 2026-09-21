@@ -68,7 +68,7 @@ config :spark,
 config :spend_log,
   ecto_repos: [SpendLog.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: []
+  ash_domains: [SpendLog.Spending]
 
 # Configure the endpoint
 config :spend_log, SpendLogWeb.Endpoint,

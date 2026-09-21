@@ -19,8 +19,7 @@ defmodule SpendLogWeb.Router do
   scope "/", SpendLogWeb do
     pipe_through :browser
 
-    # EXAMPLE route — repoint this at your own LiveView and delete ExampleLive + ExampleForm.vue.
-    live "/", ExampleLive
+    live "/", SpendingLive
   end
 
   # Other scopes may use custom stacks.
