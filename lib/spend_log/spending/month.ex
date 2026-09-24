@@ -67,6 +67,22 @@ defmodule SpendLog.Spending.Month do
   @spec future?(t(), Date.t()) :: boolean()
   def future?(month, today \\ Date.utc_today()), do: month > from_date(today)
 
+  @doc """
+  Whether `month` falls before `other`.
+
+  Zero-padded `"YYYY-MM"` sorts lexicographically exactly as it sorts chronologically. That is a
+  property of the format, so the comparison lives in the module that owns the format rather than
+  being spelled as a bare string compare at each call site.
+
+      iex> SpendLog.Spending.Month.before?("2025-12", "2026-01")
+      true
+
+      iex> SpendLog.Spending.Month.before?("2026-01", "2026-01")
+      false
+  """
+  @spec before?(t(), t()) :: boolean()
+  def before?(month, other), do: month < other
+
   @doc ~s(A display label, e.g. `"September 2026"`.)
   @spec label(t()) :: String.t()
   def label(month) do

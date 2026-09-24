@@ -32,6 +32,7 @@ function select(month: string | null) {
         variant="outline"
         square
         aria-label="Previous month"
+        :disabled="props.month.prev === null"
         @click="select(props.month.prev)"
       />
       <UButton
@@ -45,7 +46,11 @@ function select(month: string | null) {
       />
     </UFieldGroup>
 
-    <p class="text-base font-medium text-highlighted">{{ props.month.label }}</p>
+    <!-- Paging changes the entire page while focus stays on the arrow, so the month has to be
+         announced or a screen-reader user gets no feedback at all. -->
+    <p class="text-base font-medium text-highlighted" aria-live="polite">
+      {{ props.month.label }}
+    </p>
 
     <UButton
       label="This month"

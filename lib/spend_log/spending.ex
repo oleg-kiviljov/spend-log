@@ -9,6 +9,9 @@ defmodule SpendLog.Spending do
   """
   use Ash.Domain, extensions: [AshPhoenix]
 
+  alias SpendLog.Spending.Entry
+  alias SpendLog.Spending.Month
+
   resources do
     resource SpendLog.Spending.Category do
       define :list_categories, action: :read
@@ -48,6 +51,28 @@ defmodule SpendLog.Spending do
   @spec monthly_summary(pos_integer(), 1..12) :: summary()
   def monthly_summary(year, month) do
     year |> list_entries_for_month!(month) |> summarize()
+  end
+
+  @doc """
+  The month containing the earliest recorded Spending Entry, or `nil` when none has ever been
+  recorded.
+
+  `nil` is the canonical first-run signal — an empty table makes SQL's `MIN()` return `NULL`, so one
+  query answers both "has anything ever been recorded?" and "how far back may the user page?". The
+  caller never needs a separate existence check.
+
+  A plain function rather than a generic action: none of Ash's five reasons to prefer an action
+  apply. `Ash.min/3` rather than a sort-and-limit read action, because this is an aggregate — the
+  record itself is not wanted, and `MIN(date)` is an index-only scan over the existing `:date`
+  index.
+  """
+  @spec earliest_month() :: Month.t() | nil
+  def earliest_month do
+    case Ash.min(Entry, :date, authorize?: false) do
+      {:ok, nil} -> nil
+      {:ok, %Date{} = date} -> Month.from_date(date)
+      {:error, error} -> raise Ash.Error.to_error_class(error)
+    end
   end
 
   @doc """
