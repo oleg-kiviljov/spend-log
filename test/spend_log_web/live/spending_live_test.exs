@@ -14,12 +14,43 @@ defmodule SpendLogWeb.SpendingLiveTest do
   import SpendLog.SpendingFixtures
 
   alias SpendLog.Spending
+  alias SpendLog.Spending.Month
 
   @island [id: "spending-page"]
+
+  # A fixed, safely-past month, so the "January 2025" header format is asserted against a real month
+  # name rather than whatever month the suite happens to run in.
+  @january "2025-01"
 
   defp props(view), do: LiveVue.Test.get_vue(view, @island).props
 
   defp today_iso, do: Date.to_iso8601(Date.utc_today())
+
+  defp this_month, do: Month.from_date(Date.utc_today())
+
+  defp next_month, do: Date.utc_today() |> Date.shift(month: 1) |> Month.from_date()
+
+  defp month_of(view), do: props(view)["month"]
+
+  defp go_to(view, month), do: render_hook(view, "select_month", %{"month" => month})
+
+  defp entry_on(date, amount, category) do
+    entry_fixture(category: category, date: Date.from_iso8601!(date), amount: Decimal.new(amount))
+  end
+
+  # Three months of history, all far enough in the past that the clock cannot affect the assertions.
+  # The January entries are inserted out of date order so a newest-first assertion can really fail.
+  defp january_history do
+    category = category_fixture(name: "Food")
+
+    entry_on("2025-01-05", "10.00", category)
+    entry_on("2025-01-20", "30.00", category)
+    entry_on("2025-01-12", "20.00", category)
+    entry_on("2025-02-14", "40.00", category)
+    entry_on("2025-03-02", "50.00", category)
+
+    category
+  end
 
   # The payload `useLiveForm` sends: every field present, and `category_id` nil rather than "" when
   # nothing is chosen (the component's `prepareData` does that).
@@ -60,6 +91,167 @@ defmodule SpendLogWeb.SpendingLiveTest do
       assert month["value"] == String.slice(today_iso(), 0, 7)
       assert month["is_current"] == true
       assert month["next"] == nil
+    end
+  end
+
+  describe "browsing by month" do
+    # 723530cc5220
+    test "shows only the selected month, newest first, under a 'January 2025' header", %{
+      conn: conn
+    } do
+      january_history()
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      go_to(view, @january)
+
+      assert month_of(view)["value"] == @january
+      assert month_of(view)["label"] == "January 2025"
+
+      # Only January's three entries — February's and March's are excluded.
+      assert ["2025-01-20", "2025-01-12", "2025-01-05"] ==
+               Enum.map(props(view)["entries"], & &1["date"])
+
+      # And the summary moved with the list (INV-021).
+      assert props(view)["summary"]["total_display"] == "€60.00"
+    end
+
+    # 723530cc5220
+    test "jumps the list back to the top on each navigation", %{conn: conn} do
+      january_history()
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      # The first move away from the current month...
+      go_to(view, "2025-03")
+      assert_push_event(view, "scroll_to_top", %{})
+
+      # ...and every move after it.
+      go_to(view, "2025-02")
+      assert_push_event(view, "scroll_to_top", %{})
+
+      # Including a move to a month with nothing in it — the list still has to go back to the top,
+      # because the previous month's rows are what the user is currently scrolled through.
+      go_to(view, "2025-04")
+      assert props(view)["entries"] == []
+      assert_push_event(view, "scroll_to_top", %{})
+    end
+
+    # 723530cc5220
+    test "does not jump to the top when the navigation was refused", %{conn: conn} do
+      january_history()
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      # Before the earliest entry, after today, and not a month at all.
+      go_to(view, "2024-12")
+      go_to(view, next_month())
+      go_to(view, "not-a-month")
+
+      refute_push_event(view, "scroll_to_top", %{})
+    end
+
+    # 6e5e8778294c
+    test "refuses to page forward past the current month", %{conn: conn} do
+      january_history()
+      # Read the clock once: reading it again below could straddle a month boundary and compare
+      # two different "today"s.
+      today = Date.utc_today()
+      entry_fixture(date: today)
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      # The forward arrow is inert on the current month...
+      assert month_of(view)["is_current"] == true
+      assert month_of(view)["next"] == nil
+
+      # ...and pressing it anyway leaves the user exactly where they were.
+      go_to(view, today |> Date.shift(month: 1) |> Month.from_date())
+
+      assert month_of(view)["value"] == Month.from_date(today)
+    end
+
+    # 1cb6c8f0c344
+    test "refuses to page back past the month holding the earliest entry", %{conn: conn} do
+      january_history()
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      go_to(view, @january)
+
+      # January 2025 holds the earliest entry, so the back arrow is inert...
+      assert month_of(view)["earliest"] == @january
+      assert month_of(view)["prev"] == nil
+      # ...while the forward arrow still works, since today is well after January 2025.
+      assert month_of(view)["next"] == "2025-02"
+
+      # ...and pressing back anyway leaves the user on the earliest available month.
+      go_to(view, "2024-12")
+
+      assert month_of(view)["value"] == @january
+
+      assert Enum.map(props(view)["entries"], & &1["date"]) == [
+               "2025-01-20",
+               "2025-01-12",
+               "2025-01-05"
+             ]
+    end
+
+    # 1cb6c8f0c344
+    test "offers the back arrow again once an older entry moves the floor", %{conn: conn} do
+      category = january_history()
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      go_to(view, @january)
+      assert month_of(view)["prev"] == nil
+
+      # A back-dated entry pushes the earliest month further back, which has to re-enable the arrow
+      # that was inert a moment ago.
+      entry_on("2024-11-30", "5.00", category)
+      go_to(view, @january)
+
+      assert month_of(view)["earliest"] == "2024-11"
+      assert month_of(view)["prev"] == "2024-12"
+
+      go_to(view, "2024-12")
+      assert month_of(view)["value"] == "2024-12"
+    end
+
+    # 098bcfa94593
+    test "shows the placeholder and offers no arrows when nothing was ever recorded", %{
+      view: view
+    } do
+      month = month_of(view)
+
+      # `earliest: nil` is what puts the first-run placeholder in place of the list. Asserted as a
+      # *present* key first: a bare `== nil` would also pass if the prop had never been sent.
+      assert Map.has_key?(month, "earliest")
+      assert month["earliest"] == nil
+      assert props(view)["entries"] == []
+
+      # ...and it withholds both arrows, not just one of them.
+      assert month["prev"] == nil
+      assert month["next"] == nil
+    end
+
+    # 098bcfa94593
+    test "refuses every navigation while nothing has ever been recorded", %{view: view} do
+      before = month_of(view)
+
+      for month <- [@january, "2024-12", this_month()] do
+        go_to(view, month)
+      end
+
+      assert month_of(view) == before
+      refute_push_event(view, "scroll_to_top", %{})
+    end
+
+    # 098bcfa94593
+    test "swaps the placeholder for real navigation as soon as the first entry lands", %{
+      view: view
+    } do
+      assert month_of(view)["earliest"] == nil
+
+      submit(view, %{"category_id" => category_fixture().id})
+
+      # The placeholder is gone and the range now has a floor.
+      assert month_of(view)["earliest"] == this_month()
+      assert length(props(view)["entries"]) == 1
     end
   end
 

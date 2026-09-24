@@ -37,6 +37,9 @@ defmodule SpendLogWeb.SpendingLive do
       |> assign(:categories, [])
       |> assign(:entries, [])
       |> assign(:summary, Spending.summarize([]))
+      # `nil` means "nothing has ever been recorded", which is also what the disconnected paint
+      # shows: the first-run prompt, with no arrows. The connected mount corrects it a moment later.
+      |> assign(:earliest_month, nil)
 
     # Iron Law #1 — no database work in the disconnected mount. The first paint renders the empty
     # states, which the Vue components handle as a first-class case.
@@ -50,7 +53,7 @@ defmodule SpendLogWeb.SpendingLive do
       <.vue
         v-component="SpendingPage"
         id="spending-page"
-        month={month_prop(@month, @today)}
+        month={month_prop(@month, @today, @earliest_month)}
         summary={summary_prop(@summary)}
         entries={Enum.map(@entries, &entry_prop/1)}
         categories={Enum.map(@categories, &%{id: &1.id, name: &1.name})}
@@ -112,13 +115,21 @@ defmodule SpendLogWeb.SpendingLive do
 
   def handle_event("select_month", %{"month" => month}, socket) when is_binary(month) do
     # The month comes from the client, so it is parsed strictly rather than coerced, and a month
-    # that cannot hold entries yet is refused outright (Iron Law #8).
+    # outside the navigable range is refused outright (Iron Law #8). Disabling the arrows is an
+    # affordance; this is the enforcement — a hand-crafted payload must not be able to park the
+    # session in a month the user was never offered.
     case Month.parse(month) do
       {:ok, _year_and_month} ->
-        if Month.future?(month, socket.assigns.today) do
-          {:noreply, socket}
+        if navigable?(month, socket.assigns) do
+          {:noreply,
+           socket
+           |> assign(:month, month)
+           |> load_month()
+           # The list is replaced wholesale, so the viewport has to go back to the top or the user
+           # lands mid-way down a month they have not seen (LiveVue: consumed by `useLiveEvent`).
+           |> push_event("scroll_to_top", %{})}
         else
-          {:noreply, socket |> assign(:month, month) |> load_month()}
+          {:noreply, socket}
         end
 
       :error ->
@@ -130,12 +141,22 @@ defmodule SpendLogWeb.SpendingLive do
   # than letting it crash the session.
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
+  # The two ends of the navigable range. Nothing recorded at all means nothing to navigate.
+  defp navigable?(_month, %{earliest_month: nil}), do: false
+
+  defp navigable?(month, %{earliest_month: earliest, today: today}) do
+    not Month.future?(month, today) and not Month.before?(month, earliest)
+  end
+
   defp load_month(socket) do
     {:ok, {year, month}} = Month.parse(socket.assigns.month)
     entries = Spending.list_entries_for_month!(year, month)
 
     socket
     |> assign(:entries, entries)
+    # Recomputed on every load because a back-dated entry can move the floor backwards, which has
+    # to re-enable a back arrow that was disabled a moment ago.
+    |> assign(:earliest_month, Spending.earliest_month())
     # Summarised from the very list being displayed, so the two can never disagree (INV-021) and
     # the totals cost no extra query.
     |> assign(:summary, Spending.summarize(entries))
@@ -181,16 +202,21 @@ defmodule SpendLogWeb.SpendingLive do
     end)
   end
 
-  defp month_prop(month, today) do
+  # `nil` on either end disables that arrow. The range is bounded by real data on one side and by
+  # the calendar on the other: a Spending Entry can only be dated today or earlier, so there is
+  # nothing to look at after the current month, and nothing to look at before the first entry ever
+  # recorded. `earliest` is `nil` when nothing has ever been recorded — then there is no navigation
+  # at all, and the page shows the first-run prompt instead of a list.
+  defp month_prop(month, today, earliest) do
+    prev = Month.previous(month)
     next = Month.next(month)
 
     %{
       value: month,
       label: Month.label(month),
-      prev: Month.previous(month),
-      # `nil` disables the control: a Spending Entry can only be dated today or earlier, so there
-      # is nothing to look at in a future month.
-      next: if(Month.future?(next, today), do: nil, else: next),
+      earliest: earliest,
+      prev: if(earliest && not Month.before?(prev, earliest), do: prev),
+      next: if(earliest && not Month.future?(next, today), do: next),
       is_current: month == Month.from_date(today)
     }
   end

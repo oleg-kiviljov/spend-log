@@ -40,8 +40,15 @@ export type Month = {
   /** "YYYY-MM" — the single value the list and the summary are both derived from. */
   value: string
   label: string
-  prev: string
-  /** `null` when the next month is in the future, which disables the control. */
+  /**
+   * The month holding the earliest entry ever recorded, or `null` when nothing has ever been
+   * recorded. `null` is the first-run signal: the page shows a placeholder prompt instead of a
+   * list, and offers no month navigation at all.
+   */
+  earliest: string | null
+  /** `null` at the earliest recorded month, which disables the back arrow. */
+  prev: string | null
+  /** `null` when the next month is in the future, which disables the forward arrow. */
   next: string | null
   is_current: boolean
 }

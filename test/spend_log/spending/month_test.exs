@@ -59,6 +59,25 @@ defmodule SpendLog.Spending.MonthTest do
     end
   end
 
+  describe "before?/2" do
+    test "orders months chronologically" do
+      assert Month.before?("2025-12", "2026-01")
+      assert Month.before?("2026-01", "2026-02")
+      refute Month.before?("2026-02", "2026-01")
+      refute Month.before?("2026-01", "2025-12")
+    end
+
+    test "a month is not before itself" do
+      refute Month.before?("2026-01", "2026-01")
+    end
+
+    test "compares across the year boundary, not just within a year" do
+      # The whole point of the zero-padded format: "2025-12" < "2026-01" as strings *and* as dates.
+      assert Month.before?("2009-12", "2010-01")
+      refute Month.before?("2010-01", "2009-12")
+    end
+  end
+
   describe "from_date/1" do
     test "drops the day" do
       assert Month.from_date(~D[2026-09-21]) == "2026-09"

@@ -11,8 +11,21 @@ const props = defineProps<{ entries: Entry[]; month: Month }>()
       <h2 class="text-sm font-medium text-highlighted">Entries</h2>
     </template>
 
+    <!-- Tested before the per-month empty state, which is also true here. The two are deliberately
+         different: this one says *nothing has ever been recorded*, which is the confusion a
+         generic "nothing here" would cause on a user's very first visit. -->
+    <UEmpty
+      v-if="props.month.earliest === null"
+      variant="naked"
+      icon="i-lucide-wallet"
+      title="No spending logged yet"
+      description="Add your first entry and this page starts filling in, month by month."
+      class="py-12"
+      data-testid="entries-never"
+    />
+
     <div
-      v-if="props.entries.length === 0"
+      v-else-if="props.entries.length === 0"
       class="flex flex-col items-center gap-2 px-4 py-12 text-center"
       data-testid="entries-empty"
     >
