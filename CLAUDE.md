@@ -124,11 +124,24 @@ assignment is incomplete.
   `printWidth: 100`, `arrowParens: "avoid"`. `mix assets.format.check` is the read-only twin.
   `.css` is deliberately out of scope — `app.css` is mostly Tailwind directives.
 
+## VERIFICATION — MANDATORY after code changes
+
+After ANY code change, you MUST run before presenting results:
+
+    mix compile --warnings-as-errors && mix format --check-formatted
+
+Do NOT present code as complete until verification passes. This is the fast per-change signal, not
+the gate: `mix precommit` is still required when the work is done, and passing it makes this
+redundant. After changing any Ash resource also run `mix ash.codegen <name> && mix ash.migrate`
+(see the Ash section). Run `mix test` after significant changes.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues. It is the
-  final gate (compile with warnings-as-errors, format, assets.format, credo, sobelow, deps.audit,
-  assets.check, test).
+  final gate, in order: `compile --warnings-as-errors` · `deps.unlock --unused` · `format` ·
+  `assets.format` (Prettier, write mode) · `credo --strict` · `sobelow --exit -i Config.CSP` ·
+  `deps.audit` · `assets.check` (`vue-tsc`) · `test`. It does **not** run `assets.build` — verify
+  that separately (see the build contract above).
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid**
   `:httpoison`, `:tesla`, and `:httpc`. Req is the preferred HTTP client for Phoenix apps.
 
@@ -172,7 +185,10 @@ This app does **not** use the default `phx.new` esbuild + tailwind-CLI pipeline.
   manifest (`priv/static/.vite/manifest.json`).
 - **Prod:** `mix assets.deploy` → `assets.build` runs **two** Vite builds (client bundle + SSR
   `js/server.js`). Vue is server-rendered via **`LiveVue.SSR.QuickBEAM`**. There is **no** `phx.digest` step.
-- **Commands:** `mix assets.setup` (npm install), `mix assets.build`, `mix assets.deploy`.
+- **Commands:** `mix assets.setup` (npm install), `mix assets.build`, `mix assets.check`
+  (`vue-tsc`), `mix assets.deploy`. `assets.check` is the only compile-time check on a
+  LiveVue prop contract — `mix compile` cannot see a Vue prop and `assets.build` strips types
+  rather than checking them, so a broken prop is a silently wrong screen, not a red build.
 - **`~H` is overridden:** `lib/spend_log_web.ex` swaps `Phoenix.Component.sigil_H` for
   `LiveVue.SharedPropsView.sigil_H` (injects shared props into `<.vue>` tags) — every
   LiveView/component uses the LiveVue sigil, not the stock one.

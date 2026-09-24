@@ -62,3 +62,37 @@ defimpl LiveVue.Encoder, for: AshPhoenix.Form do
     |> LiveVue.Encoder.encode(opts)
   end
 end
+
+# The encoder is TRANSITIVE, and nothing in the code you write says so. A
+# `@derive {LiveVue.Encoder, only: [:amount, :date]}` list names the FIELD, never the field's TYPE,
+# and the derived impl recurses into every value it takes. A struct-valued field therefore needs an
+# impl of its own, or encoding raises `Protocol.UndefinedError` on the whole map.
+#
+# **Formatting money on the server is not a defence against this**, which is the part that cost a
+# demo. Every amount this app sends is already a finished string (`Money.to_eur/1`), and it crashed
+# anyway. LiveVue diffs props by key against `__changed__`, and the entry there for a complex prop
+# is the previous value of the ASSIGN OF THE SAME NAME — the raw one. So `summary` reaches
+# `Jsonpatch.diff/3` as `%{total: Decimal.new("0.00"), rows: []}`, not as the `total_display:
+# "€0.00"` map `summary_prop/1` built: Vue receives the mapped prop, and the raw assign is what gets
+# encoded.
+#
+# It fires only on an UPDATE, never on mount — and `config/test.exs` sets `enable_props_diff: false`,
+# which disables exactly that path, so the suite cannot see the class at all. Flip the flag and eight
+# of these tests reproduce the production crash.
+#
+# `Ash.NotLoaded` ships alongside it for the same shape of reason: any relationship named in a
+# `@derive` list is unloaded on every page that did not load it.
+
+defimpl LiveVue.Encoder, for: Decimal do
+  # As a string, not a float: JS has no native decimal, and `:decimal` is mandated for money
+  # precisely so precision survives. Format it on the client.
+  def encode(decimal, _opts), do: Decimal.to_string(decimal)
+end
+
+defimpl LiveVue.Encoder, for: Ash.NotLoaded do
+  # `nil`, leniently. A `@derive` list is routinely a superset of what any one page loads — each
+  # page loads what its own component reads — so an unloaded field is the normal case, not an error.
+  # Raising here would also be the wrong production behaviour: under `LiveVue.SSR.QuickBEAM` it is a
+  # server-side render failure, i.e. a blank page rather than a component branching on a `null`.
+  def encode(_not_loaded, _opts), do: nil
+end
